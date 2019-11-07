@@ -56,57 +56,299 @@ N.B. to give you a bit more data I included data from previous years (Study1, St
 
 ```{r}
 # Load the libraries
+library(pacman)
+p_load(tidyverse, patchwork)
 
-# Load the file
+# Load the files
+S1_G1_T1 <- read_csv("data/Study1_G1_T1_Synchronous.csv")
+S1_G1_T2 <- read_csv("data/Study1_G1_T2_TurnTaking.csv")
+S1_G1_T3 <- read_csv("data/Study1_G1_T3_SelfPaced.csv")
+
 # Plot
+T1_resp <- ggplot(S1_G1_T1)+
+  geom_line(aes(time, Resp1, colour = "blue"))+
+  geom_line(aes(time, Resp2, colour = "red"))
+T1_HR <- ggplot(S1_G1_T1)+
+  geom_line(aes(time, HR1, colour = "blue"))+
+  geom_line(aes(time, HR2, colour = "red"))
 
-## Remove outliers
+T2_resp <- ggplot(S1_G1_T2)+
+  geom_line(aes(time, Resp1, colour = "blue"))+
+  geom_line(aes(time, Resp2, colour = "red"))
+T2_HR <- ggplot(S1_G1_T2)+
+  geom_line(aes(time, HR1, colour = "blue"))+
+  geom_line(aes(time, HR2, colour = "red"))
 
-### Tip, check the function below
-removeOuts <- function(ts,threshold){
-  ts[ts > (mean(ts,na.rm=T) +
-             (threshold*sd(ts,na.rm=T))) | 
-       ts < (mean(ts,na.rm=T) -
-             (threshold*sd(ts,na.rm=T)))] = mean(ts,na.rm=T)
+T3_resp <- ggplot(S1_G1_T3)+
+  geom_line(aes(time, Resp1, colour = "blue"))+
+  geom_line(aes(time, Resp2, colour = "red"))
+T3_HR <- ggplot(S1_G1_T3)+
+  geom_line(aes(time, HR1, colour = "blue"))+
+  geom_line(aes(time, HR2, colour = "red"))
+
+# Plotting these together pairwise
+(T1_resp + T1_HR) / (T2_resp + T2_HR) / (T3_resp + T3_HR)
+```
+
+Removing outliers
+```{r}
+# Creating a function which takes the value of the previous index, which has a value within the threshold range (based on IQR). That is, the previous index with a value, which is not an outlier.
+getClosestMin <- function(i, withinThresh)
+{
+  for(j in 1:length(withinThresh))
+  {
+    if(withinThresh[j] > i)
+      return(withinThresh[j - 1])
+  }
+}
+
+# Creating a function which takes the value of the next index, which has a value within the threshold range (based on IQR). That is, the previous index with a value, which is not an outlier.
+getClosestMax <- function(i, withinThresh)
+{
+  for(j in length(withinThresh):1)
+  {
+    if(withinThresh[j] < i)
+      return(withinThresh[j + 1])
+  }
+}
+
+# Creating a function which calculates a new value within the threshold range for outliers
+removeOuts <- function(ts){
+  OutVals <- boxplot(ts)$out # The values which are outliers according to IQR
+  withinThresh <- which(!(ts %in% OutVals)) # Indices which do not have values which are outliers
+  for (i in 1:length(ts)){
+    if(i %% 10000 == 0){
+      print(i) # Prints the index number per 100000 (to make the output smaller)
+    }
+    if(!(i %in% withinThresh))
+    {
+      if(i == 1){
+        ts[i] = ts[getClosestMax(i, withinThresh)] # If the first value is an outlier, it gets the value of the next index
+      }
+      else if(i == length(ts)){
+        ts[i] = ts[getClosestMin(i, withinThresh)] # If the last value is an outlier, it gets the value of the previous index
+      }
+      else{
+        ts[i] = (ts[getClosestMin(i, withinThresh)] + ts[getClosestMax(i, withinThresh)]) / 2 # Otherwise, it gets the mean of the two values from the closest indexes - which are not outliers 
+      }
+    }
+  }
   return(ts)
 }
-threshold=2.5 # Default value at 2.5 sds from the mean
+```
+
+Applying the function to the data
+```{r}
+# Applying the function to the data
+T1noOut <- S1_G1_T1 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+T2noOut <- S1_G1_T2 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+T3noOut <- S1_G1_T3 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+
+# Doing this to be time-efficient when running all of the document
+#Loading/Creating the proper variables
+T1filename <- "T1noOut.csv"
+T2filename <- "T2noOut.csv"
+T3filename <- "T3noOut.csv"
+
+if (file.exists(c(T1filename, T2filename, T3filename))){
+  T1noOut <- read_csv(T1filename)
+  T2noOut <- read_csv(T2filename)
+  T3noOut <- read_csv(T3filename)
+  print(paste("Loaded files:", T1filename, T2filename, T3filename))
+}else{
+    T1noOut <- G1T1 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+    T2noOut <- G1T2 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+    T3noOut <- G1T3 %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), removeOuts)
+    write_csv(T1noOut, T1filename)
+    write_csv(T2noOut, T2filename)
+    write_csv(T3noOut, T3filename)
+}
 
 
-# Plot raw data againt those with the artiacts removed
+```
 
+Plotting the raw data against those with the artifacts removed
+```{r}
+# Plot
+T1_1 <- ggplot()+
+  geom_line(data = S1_G1_T1, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T1noOut, aes(time, Resp1, colour = "red"))
+T1_2 <- ggplot()+
+  geom_line(data = S1_G1_T1, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T1noOut, aes(time, Resp2, colour = "red"))
+T1_3 <- ggplot()+
+  geom_line(data = S1_G1_T1, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T1noOut, aes(time, HR1, colour = "red"))
+T1_4 <- ggplot()+
+  geom_line(data = S1_G1_T1, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T1noOut, aes(time, HR2, colour = "red"))
 
-## Scale
-### Tip: if scale() gives some issues, try the one below
-#z_scale <- function(column){
-#  column_c <- (column - mean(column)) / sd(column)
-#}
+T2_1 <- ggplot()+
+  geom_line(data = S1_G1_T2, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T2noOut, aes(time, Resp1, colour = "red"))
+T2_2 <- ggplot()+
+  geom_line(data = S1_G1_T2, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T2noOut, aes(time, Resp2, colour = "red"))
+T2_3 <- ggplot()+
+  geom_line(data = S1_G1_T2, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T2noOut, aes(time, HR1, colour = "red"))
+T2_4 <- ggplot()+
+  geom_line(data = S1_G1_T2, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T2noOut, aes(time, HR2, colour = "red"))
 
-# Plot again to check how scaled data look like
+T3_1 <- ggplot()+
+  geom_line(data = S1_G1_T3, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T3noOut, aes(time, Resp1, colour = "red"))
+T3_2 <- ggplot()+
+  geom_line(data = S1_G1_T3, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T3noOut, aes(time, Resp2, colour = "red"))
+T3_3 <- ggplot()+
+  geom_line(data = S1_G1_T3, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T3noOut, aes(time, HR1, colour = "red"))
+T3_4 <- ggplot()+
+  geom_line(data = S1_G1_T3, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T3noOut, aes(time, HR2, colour = "red"))
 
+# Plotting these together pairwise
+(T1_1 + T1_2) / (T1_3 + T1_4)
+(T2_1 + T2_2) / (T2_3 + T2_4)
+(T3_1 + T3_2) / (T3_3 + T3_4)
 
-## Downsample
-### This is tricky, so you can have a look at my code  (relying on Ludvig's groupdata2) if you get stuck
-#d1 = d %>%
-#  group(n = 100, method = 'greedy') %>%
-#  dplyr::summarise(
-#    time = mean(time,na.rm=T),
-#    HR1 = mean(HR1S,na.rm=T),
-#    HR2 = mean(HR2S,na.rm=T),
-#    Resp1 = mean(Resp1S,na.rm=T),
-#    Resp2 = mean(Resp2S,na.rm=T),
-#    rowname = rowname[1]) #the index we use to put them back together 
+```
 
-## Plot the downsampled data
-p4 <- ggplot(data = d1) +
-  geom_path(aes(time, Resp1, color = "P1")) +
-  geom_path(aes(time, Resp2, color = "P2")) +
+Scaling
+```{r}
+# Creating scaling function
+z_scale <- function(column){
+  column_c <- (column - mean(column)) / sd(column)
+}
+
+# Applying it on several variables
+T1noOuts <-
+  T1noOut %>% 
+  mutate_at(c("Resp1", "Resp2", "HR1", "HR2"), z_scale)
+T2noOuts <-
+  T2noOut %>% 
+  mutate_at(c("Resp1", "Resp2", "HR1", "HR2"), z_scale)
+T3noOuts <-
+  T3noOut %>% 
+  mutate_at(c("Resp1", "Resp2", "HR1", "HR2"), z_scale)
+
+# It is okay, that Resp1 in T1 and T2 are specified as NAs (because you cannot divide by 0), since this is an expression of no variance in the data. Therefore, this data is bad data no matter what, and can be removed.
+```
+
+Plotting again to check how scaled data look like
+```{r}
+# Plotting the scaled data against the data without outliers, which is not scaled
+T1_1_ <- ggplot()+
+  geom_line(data = T1noOut, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T1noOuts, aes(time, Resp1, colour = "red"))
+T1_2_ <- ggplot()+
+  geom_line(data = T1noOut, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T1noOuts, aes(time, Resp2, colour = "red"))
+T1_3_ <- ggplot()+
+  geom_line(data = T1noOut, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T1noOuts, aes(time, HR1, colour = "red"))
+T1_4_ <- ggplot()+
+  geom_line(data = T1noOut, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T1noOuts, aes(time, HR2, colour = "red"))
+
+T2_1_ <- ggplot()+
+  geom_line(data = T2noOut, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T2noOuts, aes(time, Resp1, colour = "red"))
+T2_2_ <- ggplot()+
+  geom_line(data = T2noOut, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T2noOuts, aes(time, Resp2, colour = "red"))
+T2_3_ <- ggplot()+
+  geom_line(data = T2noOut, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T2noOuts, aes(time, HR1, colour = "red"))
+T2_4_ <- ggplot()+
+  geom_line(data = T2noOut, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T2noOuts, aes(time, HR2, colour = "red"))
+
+T3_1_ <- ggplot()+
+  geom_line(data = T3noOut, aes(time, Resp1, colour = "blue")) +
+  geom_line(data = T3noOuts, aes(time, Resp1, colour = "red"))
+T3_2_ <- ggplot()+
+  geom_line(data = T3noOut, aes(time, Resp2, colour = "blue")) +
+  geom_line(data = T3noOuts, aes(time, Resp2, colour = "red"))
+T3_3_ <- ggplot()+
+  geom_line(data = T3noOut, aes(time, HR1, colour = "blue"))+
+  geom_line(data = T3noOuts, aes(time, HR1, colour = "red"))
+T3_4_ <- ggplot()+
+  geom_line(data = T3noOut, aes(time, HR2, colour = "blue"))+
+  geom_line(data = T3noOuts, aes(time, HR2, colour = "red"))
+
+# Plotting these together pairwise
+(T1_1_ + T1_2_) / (T1_3_ + T1_4_)
+(T2_1_ + T2_2_) / (T2_3_ + T2_4_)
+(T3_1_ + T3_2_) / (T3_3_ + T3_4_)
+```
+
+Downsampling
+```{r}
+df1 <- T1noOuts %>%
+  group(n = 100, method = 'greedy') %>%
+  dplyr::summarise(
+    time = mean(time,na.rm=T),
+    HR1 = mean(HR1,na.rm=T),
+    HR2 = mean(HR2,na.rm=T),
+    Resp1 = mean(Resp1,na.rm=T),
+    Resp2 = mean(Resp2,na.rm=T))
+ 
+df2 <- T2noOuts %>%
+  group(n = 100, method = 'greedy') %>%
+  dplyr::summarise(
+    time = mean(time,na.rm=T),
+    HR1 = mean(HR1,na.rm=T),
+    HR2 = mean(HR2,na.rm=T),
+    Resp1 = mean(Resp1,na.rm=T),
+    Resp2 = mean(Resp2,na.rm=T))
+
+df3 <- T3noOuts %>%
+  group(n = 100, method = 'greedy') %>%
+  dplyr::summarise(
+    time = mean(time,na.rm=T),
+    HR1 = mean(HR1,na.rm=T),
+    HR2 = mean(HR2,na.rm=T),
+    Resp1 = mean(Resp1,na.rm=T),
+    Resp2 = mean(Resp2,na.rm=T))
+```
+
+Plotting the downsampled data
+```{r}
+p1 <- ggplot(data = df1) +
+  geom_path(aes(time, Resp1, color = "Resp 1")) +
+  geom_path(aes(time, Resp2, color = "Resp 2")) +
   labs(x = "time", y = "Resp") +
-  theme(legend.position="bottom")
-p4
+  theme(legend.position = "bottom")
+p1
+# Only plots one line in the blot, because resp1 only has NAs
 
-## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
-## Tip the info is in the file name
+p2 <- ggplot(data = df2) +
+  geom_path(aes(time, Resp1, color = "Resp 1")) +
+  geom_path(aes(time, Resp2, color = "Resp 2")) +
+  labs(x = "time", y = "Resp") +
+  theme(legend.position = "bottom")
+p2
+# Only plots one line in the blot, because resp1 only has NAs
+
+p3 <- ggplot(data = df3) +
+  geom_path(aes(time, Resp1, color = "Resp 1")) +
+  geom_path(aes(time, Resp2, color = "Resp 2")) +
+  labs(x = "time", y = "Resp") +
+  theme(legend.position = "bottom")
+p3
+
+```
+
+Adding the group, trial and condition to the cleaned up, scaled, downsampled data
+```{r}
+values <- str_extract_all("Study1_G1_T1_Synchronous", "\\d")[[1]]
+df1$Group <- values[2]
+df1$Trial <- values[3]
+df1$Condition <- str_extract(filename)
+
 
 
 ```
