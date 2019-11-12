@@ -54,7 +54,6 @@ N.B. to give you a bit more data I included data from previous years (Study1, St
 
 ```{r}
 # Load the libraries
-install.packages("pacman")
 library(pacman, tidyverse)
 p_load(tidyverse)
 
@@ -252,6 +251,7 @@ z_scale <- function(column){
 T1noOutS <- T1noOut %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), z_scale)
 T2noOutS <- T2noOut %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), z_scale)
 T3noOutS <- T3noOut %>% mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), z_scale)
+
 # Plot again to check how scaled data look like
 pOutvsNout1S <- ggplot()+
   geom_line(data = T1noOutS, aes(time, HR1, color = "red"))+
@@ -321,6 +321,7 @@ pOutvsNout12S
 ## Downsample
 ### This is tricky, so you can have a look at my code  (relying on Ludvig's groupdata2) if you get stuck
 p_load(groupdata2)
+
 df1 = T1noOutS %>%
   group(n = 100, method = 'greedy') %>%
   dplyr::summarise(
@@ -441,9 +442,6 @@ A couple of tips:
 
 ```{r}
 # Define a function running the loading, artifact removal, scaling, downsampling, info adding.
-library(pacman)
-p_load(groupdata2, tidyverse, dplyr)
-
 data_preprocess <- function(filename, inputdir, outputdir){
   print(filename)
   #create output folder, will only actually do something on the first function call
@@ -476,16 +474,112 @@ files <- list.files("data", pattern="\\.csv$")
 # Run the function on the whole dataset using map_df
 output <- purrr::map_df(files, data_preprocess, "data", "output")
         
-         
-# Now we need to make sure all the data are meaningful or something has to be removed
-# E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
 
-# plots plots plots
+# We realised, we had not extracted the study number. Since the function takes 13 hours to run again, we solve it in this way.
 
+# Creating function, which groups numbers with consecutive numbers (in order to "recreate" the studies, which belong together in the output).
+groupConsequtives <- function(al){
+  #list of lists ;)
+  lol <- list()
+  listcoords <- which(diff(al) != 1)
+  startCoord <- 1
+  if(length(listcoords) == 0){
+    return(list(al)) # Får tilbage som en liste
+  }
+  for(c in listcoords){
+    newl <- list(al[startCoord:c]) # liste af alle værdier fra start til c (hver værdi i list-cords = index for når en gruppe slutter)
+    startCoord <- c + 1
+    lol <- c(lol, newl)
+  }
+  if(length(al) > listcoords[length(listcoords)])
+  {
+    lol <- c(lol, list(al[(listcoords[length(listcoords)]+1):length(al)]))
+  }
+  return(lol)
+}
+
+# Applying the function to the data
+listofgroups <- groupConsequtives(output$.groups)
+
+# Extracting study number from the filenames
+study <- str_extract(files, "(\\d)")
+
+# 
+currentindex <- 0
+output$Study <- 0
+for (i in 1:length(listofgroups)){
+  output[listofgroups[[i]] + currentindex,]$Study <- study[i]
+  currentindex <- currentindex + length(listofgroups[[i]])
+}
+
+# FORDI VI HAR FUCKET OP I FUNKTIONEN - SÅ DET ER IKKE I DET ENDELIGE DOKUMENT (fordi 10 bliver taget som 2 tal og ikke som 1 tal...)
+output[which(output$Study == 2 & output$trial == 0),]$group <- 10
+output[which(output$Study == 3 & output$trial == 0),]$group <- 10
+
+output[which(output$Study == 3 & output$group == 10 & output$condition == "Synchronous"),]$trial <- 1
+output[which(output$Study == 3 & output$group == 10 & output$condition == "Conversation"),]$trial <- 2
+output[which(output$Study == 3 & output$group == 10 & output$condition == "TurnTaking"),]$trial <- 3
+
+output[which(output$Study == 2 & output$group == 10 & output$condition == "Conversation"),]$trial <- 1
+output[which(output$Study == 2 & output$group == 10 & output$condition == "TurnTaking"),]$trial <- 2
+output[which(output$Study == 2 & output$group == 10 & output$condition == "Synchronous"),]$trial <- 3
+
+```
+
+Now we need to make sure all the data are meaningful or something has to be removed
+E.g. "Study1_G1_T1_Synchronous" has one bad respiration signal. We could replace it with NAs
+```{r}
+# Replacing NaNs with NAs
+output[output == "NaN"] <- NA
+
+# Unique ID per pair
+output$Study <- as.numeric(output$Study)
+output$pairID <- 100*output$Study+output$group
+
+# Putting time on the same scale (seconds) (study 3 is different from the others) - assuming that the large values in study 3 are in milliseconds and that the rest are in minutes
+output$time <- ifelse(output$time > 400, output$time/1000, output$time*60)
+
+# Making a "time-since-the-beginning-of-the-experiment" column
+output <- output %>%
+  group_by(pairID, condition) %>%
+  mutate(timesincestart = time - min(time))
+```
+
+Plotting to look for bad data aka identifying bad data
+```{r}
+
+
+  
+ggplot(data = output[which(output$pairID == 102 & output$condition == "Synchronous"),]) +
+  geom_line(aes(timesincestart, HR1, color = "HR1")) +
+  labs(x = "time", y = "Resp") +
+  theme(legend.position = "bottom")
+
+```
+
+
+```{r}
 # Remove bad data
+testSeq <- function(ts, threshold){
+  runningTot <- 0
+  sequential <- rle(ts)
+  for(i in 1:length(sequential$lengths)){
+    if(sequential$lengths[i] > 10){
+      interval <- output[sequential$lengths[i] + runningTot,]$timesincestart - output[1 + runningTot,]$timesincestart
+      if(interval > threshold){
+        ts[(1 + runningTot):(runningTot+sequential$lengths[i])] <- NA
+      }
+    }
+    runningTot <- runningTot + sequential$lengths[i]
+  }
+  return(ts)
+}
 
-# Save the data
+output <- output %>%
+  mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), testSeq, 2)
 
+# Saving data
+write_csv(output, "Preprocessed_data.csv")
 ```
 
 ## Now we need to run some analysis
@@ -511,13 +605,38 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 
 
 ```{r}
-
 # Genearate a column for each: previous HR1, HR2, Resp1, Resp2
-# Genearate a column for each: change in HR1, HR2, Resp1, Resp2
+output$prevHR1 <- lag(output$HR1, 1)
+output$prevHR2 <- lag(output$HR2, 1)
+output$prevResp1 <- lag(output$Resp1, 1)
+output$prevResp2 <- lag(output$Resp2, 1)
 
+# Genearate a column for each: change in HR1, HR2, Resp1, Resp2
+output$changeHR1 <- output$HR1 - output$prevHR1
+output$changeHR2 <- output$HR2 - output$prevHR2
+output$changeResp1 <- output$Resp1 - output$prevResp1
+output$changeResp2 <- output$Resp2 - output$prevResp2
 
 # Make the data long, so we can analyze both participants at the same time 
 ## N.B. This is a bit tricky and you might have to do it in several steps
+output %>% 
+  gather(
+    participant, change_HR_self,
+    changeHR1, changeHR2)
+  select()
+  )
+
+d_hr_change
+gather (d, # data
+participant, HR_change_self , # new vars
+HR1_change, HR2_change) %>% #old vars
+select ( # drop irrelevant vars
+time, HR_change_self , participant,
+Study , Group, Condition , Trial)
+mutate ( # create unique participant ID
+participant = parse_number as.character (Group)) * 10 +
+parse_number (
+
 
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 
