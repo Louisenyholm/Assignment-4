@@ -64,6 +64,9 @@ p_load(tidyverse)
 G1T1 <- read_csv("data/Study1_G1_T1_Synchronous.csv")
 G1T2 <- read_csv("data/Study1_G1_T2_TurnTaking.csv")
 G1T3 <- read_csv("data/Study1_G1_T3_SelfPaced.csv")
+
+# Identifying coloumns
+# From reading different files, we assume study 1 and study 2 to be measured in seconds, study 3 to be measured in ms, and study 4 to be measured in both ms and minutes.
 ```
 
 ```{r}
@@ -226,23 +229,23 @@ pOutvsNout12 <- ggplot()+
   geom_line(data = G1T3, aes(time, Resp2, color = "red"))+
   geom_line(data = T3noOut, aes(time, Resp2, color = "blue"))
 
-pOutvsNout1
-pOutvsNout2
-pOutvsNout3
-pOutvsNout4
-pOutvsNout5
-pOutvsNout6
-pOutvsNout7
-pOutvsNout8
-pOutvsNout9
-pOutvsNout10
-pOutvsNout11
-pOutvsNout12
+#pOutvsNout1
+#pOutvsNout2
+#pOutvsNout3
+# pOutvsNout4
+# pOutvsNout5
+# pOutvsNout6
+# pOutvsNout7
+# pOutvsNout8
+# pOutvsNout9
+# pOutvsNout10
+# pOutvsNout11
+# pOutvsNout12
 
 ```
 
 ```{r}
-## Scale
+# Scaling
 
 z_scale <- function(column){
   column_c <- (column - mean(column)) / sd(column)
@@ -301,18 +304,18 @@ pOutvsNout12S <- ggplot()+
   geom_line(data = T3noOutS, aes(time, Resp2, color = "red"))+
   geom_line(data = T3noOut, aes(time, Resp2, color = "blue"))
 
-pOutvsNout1S
-pOutvsNout2S
-pOutvsNout3S
-pOutvsNout4S
-pOutvsNout5S
-pOutvsNout6S
-pOutvsNout7S
-pOutvsNout8S
-pOutvsNout9S
-pOutvsNout10S
-pOutvsNout11S
-pOutvsNout12S
+# pOutvsNout1S
+# pOutvsNout2S
+# pOutvsNout3S
+# pOutvsNout4S
+# pOutvsNout5S
+# pOutvsNout6S
+# pOutvsNout7S
+# pOutvsNout8S
+# pOutvsNout9S
+# pOutvsNout10S
+# pOutvsNout11S
+# pOutvsNout12S
 
 
 ```
@@ -398,12 +401,12 @@ p6 <- ggplot(data = df3) +
   labs(x = "time", y = "Resp") +
   theme(legend.position="bottom")
 
-p1
-p2
-p3
-p4
-p5
-p6
+# p1
+# p2
+# p3
+# p4
+# p5
+# p6
 
 
 ## Now add the group, trial, condition to the cleaned up, scaled, downsampled data
@@ -420,6 +423,7 @@ df3$group <- "1"
 df3$trial <- "3"
 df3$condition <- "SelfPaced"
 
+# Creating a function to extract the info from the filename
 addInfo <- function(df, filename){
   values <- str_extract_all(filename, "\\d")[[1]]
   df$group <- values[2]
@@ -427,6 +431,7 @@ addInfo <- function(df, filename){
   df$condition <- str_extract(filename, "(?<=_)[a-zA-Z]{2,}")
   return(df)
 }
+
 ```
 
 
@@ -543,20 +548,10 @@ output$time <- ifelse(output$time > 400, output$time/1000, output$time*60)
 output <- output %>%
   group_by(pairID, condition) %>%
   mutate(timesincestart = time - min(time))
+
+# Ungrouping
+# output <- ungroup(output)
 ```
-
-Plotting to look for bad data aka identifying bad data
-```{r}
-
-
-  
-ggplot(data = output[which(output$pairID == 102 & output$condition == "Synchronous"),]) +
-  geom_line(aes(timesincestart, HR1, color = "HR1")) +
-  labs(x = "time", y = "Resp") +
-  theme(legend.position = "bottom")
-
-```
-
 
 ```{r}
 # Remove bad data
@@ -572,15 +567,35 @@ testSeq <- function(ts, threshold){
     }
     runningTot <- runningTot + sequential$lengths[i]
   }
+  if(sum(is.na(ts))> 0.25*length(ts)){
+    ts[1:length(ts)] <- NA
+  }
   return(ts)
 }
 
 output <- output %>%
-  mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), testSeq, 2)
+  group_by(pairID, condition) %>% 
+  mutate_at(c("HR1", "HR2", "Resp1", "Resp2"), testSeq, 0.5) # Defining the columns, it operates on, and the funcition with its threshold of 2 (seconds)
 
 # Saving data
 write_csv(output, "Preprocessed_data.csv")
 ```
+
+Plotting to look for bad data aka identifying bad data (in study 4, which we were told to focus on)
+```{r}
+ggplot(data = output[which(output$pairID == 102 & output$condition == "Synchronous"),]) +
+  geom_line(aes(timesincestart, HR1, color = "HR1")) +
+  labs(x = "time", y = "Resp") +
+  theme(legend.position = "bottom")
+
+## FLERE PLOTS
+# IDENTIFYING NA-CORRECTEd AKA BAD DATA
+#output %>%
+ # group_by(pairID, condition) %>% 
+#  summarise(sum(is.na("HR1"))
+
+```
+
 
 ## Now we need to run some analysis
 
@@ -605,39 +620,80 @@ Bonus question: what if we include an additional layer? Is my heart rate just ad
 
 
 ```{r}
-# Genearate a column for each: previous HR1, HR2, Resp1, Resp2
-output$prevHR1 <- lag(output$HR1, 1)
-output$prevHR2 <- lag(output$HR2, 1)
-output$prevResp1 <- lag(output$Resp1, 1)
-output$prevResp2 <- lag(output$Resp2, 1)
+# Reading data (to avoid having to run all of the document)
+output <- read_csv("Preprocessed_data.csv")
 
-# Genearate a column for each: change in HR1, HR2, Resp1, Resp2
-output$changeHR1 <- output$HR1 - output$prevHR1
-output$changeHR2 <- output$HR2 - output$prevHR2
-output$changeResp1 <- output$Resp1 - output$prevResp1
-output$changeResp2 <- output$Resp2 - output$prevResp2
+# Genearate a column for each: previous HR1, HR2, Resp1, Resp2 and genearate a column for each: change in HR1, HR2, Resp1, Resp2
+output <- output %>% 
+  group_by(pairID, condition) %>% 
+  mutate(futHR1 = lead(HR1, 1),
+         futHR2 = lead(HR2, 1),
+         futResp1 = lead(Resp1, 1),
+         futResp2 = lead(Resp2, 1),
+         changeHR1 = futHR1-HR1,
+         changeHR2 = futHR2-HR2,
+         changeResp1 = futResp1-Resp1,
+         changeResp2 = futResp2-Resp2)
+ 
+# Making the data long, so we can analyze both participants at the same time 
+# Ungrouping the data
+output <- ungroup(output)
 
-# Make the data long, so we can analyze both participants at the same time 
-## N.B. This is a bit tricky and you might have to do it in several steps
-output %>% 
-  gather(
-    participant, change_HR_self,
-    changeHR1, changeHR2)
-  select()
-  )
+# HR
+hr_change <- output %>% 
+   gather(participant, changeHR_self, changeHR1, changeHR2) %>% 
+   select(time, changeHR_self, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
 
-d_hr_change
-gather (d, # data
-participant, HR_change_self , # new vars
-HR1_change, HR2_change) %>% #old vars
-select ( # drop irrelevant vars
-time, HR_change_self , participant,
-Study , Group, Condition , Trial)
-mutate ( # create unique participant ID
-participant = parse_number as.character (Group)) * 10 +
-parse_number (
+# HR_self
+hr_self <- output %>% 
+   gather(participant, HR_self, HR1, HR2) %>% 
+   select(time, HR_self, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
+
+# HR_other
+hr_other <- output %>% 
+   gather(participant, HR_other, HR2, HR1) %>% 
+   select(time, HR_other, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
+
+# Resp
+resp_change <- output %>% 
+   gather(participant, changeResp_self, changeResp1, changeResp2) %>% 
+   select(time, changeResp_self, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
+
+# Resp_self
+resp_self <- output %>% 
+   gather(participant, resp_self, Resp1, Resp2) %>% 
+   select(time, resp_self, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
+
+# Resp_other
+resp_other <- output %>% 
+   gather(participant, resp_other, Resp2, Resp1) %>% 
+   select(time, resp_other, participant, pairID, Study, condition, trial) %>% 
+   mutate(participant = parse_number(as.character(pairID))*10 + parse_number(participant)
+   )
+
+# Merging
+dod <- merge(hr_change, resp_change, by = c("time", "pairID", "condition", "participant", "Study", "trial"), all = T)
+#dod1 <- merge(dod, hr_self, by = c("time", "pairID", "participant", "Study", "condition", "trial"), all = T)
+#dod2 <- merge(dod1, hr_other, by = c("time", "pairID", "participant", "Study", "condition", "trial"))
+#dod3 <- merge(dod2, resp_self, by = c("time", "pairID", "participant", "Study", "condition", "trial"))
+#dod4 <- merge(dod3, resp_other, by = c("time", "pairID", "participant", "Study", "condition", "trial")
 
 
+#dod <- merge(dod, hr_self, all = T)
+merge(hr_change[1:50175,], resp_change[1:50175,], all = T)
+
+
+nrow(resp_change) == length(unique(resp_change$participant))
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 
 # Model change as a function of own and other previous state 
