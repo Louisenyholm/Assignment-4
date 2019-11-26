@@ -752,11 +752,11 @@ summary(HRm2)
 
 
 # 
-HRm3 <- lmer(changeHR_self ~ 
-             (HR_self + HR_other) * condition + 
-             (HR_self + HR_other) * condition + (1|participant) +
-             (HR_self + HR_other) * condition + (1|group), data = S4, REML = F) 
-summary(HRm3)
+# HRm3 <- lmer(changeHR_self ~ 
+#              (HR_self + HR_other) * condition + 
+#              (HR_self + HR_other) * condition + (1|participant) +
+#              (HR_self + HR_other) * condition + (1|group), data = S4, REML = F) 
+# summary(HRm3)
 
 # Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
 
@@ -779,15 +779,15 @@ set.seed(69)
 ## Thank you Riccardo <3
 S4 <- S4 %>%
   group_by(participant, condition) %>%
-  mutate(HR_fut = lead(HR_self, 1))
+  mutate(HR_self_fut = lead(HR_self, 1))
 
 shuffled_data <- S4 %>%
   group_by(participant, condition) %>%
   mutate(
     HR_self = sample(HR_self),
     HR_other = sample(HR_other),
-    HR_fut = lead(HR_self,1),
-    changeHR_self = HR_fut-HR_self,
+    HR_self_fut = lead(HR_self,1),
+    changeHR_self = HR_self_fut-HR_self,
     Type= "shuffled" # Defining all the shuffled data as shuffled in a new column
   )
 
@@ -837,44 +837,72 @@ S4 <- S4 %>%
 
 # Adding columns
 S4$HR_other_fut <- lead(S4$HR_other, 1)
-S4$HR_other_change <- S4$HR_other_fut - S4$HR_other
 
 # Identify unique pairs within a given study (to keep things manageable) and create list of possible surrogate pairs (e.g. individual 1 from pair 1 and individual 2 from pair 2)
 Groups <- as.numeric(as.character(unique(S4$group[S4$StudyNum==4]))) # Lists all pairs
 
 SurrogateList <- expand.grid(a = Groups, b = Groups) # Identify all possible combinations of 2 pairs
 
-SurrogateList = subset(SurrogateList, a != b) # Exclude combinations with identical pairs
+SurrogateList <- subset(SurrogateList, a != b) # Exclude combinations with identical pairs
 
 surrodf <- tibble()
 
 for (i in 1:nrow(SurrogateList)){  # loop through all combinations    
   x <- subset(S4, group==SurrogateList$a[i]) # subset data from the first pair    
-  y <- subset(S4, group==SurrogateList$a[i]) # subset data from the second pair       
+  y <- subset(S4, group==SurrogateList$b[i]) # subset data from the second pair       
   group <- c(800 + ((1:4)*i))                            # create new pair id   
   for (co in c("Synchronous","TurnTaking", "Conversation", "MovementCoop", "MovementGuided")){ # loop through conditions      
     if (co %in% unique(x$condition) & co %in% unique(y$condition)){      # check that both pairs have the data for that condition         
       z1 <- subset(x, condition==co)            # subset only that condtion from first pair            
       z2 <- subset(y, condition==co)            # subset only that condtion from second pair            
       if (nrow(z1) > nrow(z2)) {	# make sure data have same length in both pairs                 
-        z1<-z1[1:length(z2)]              
+        z1<-z1[1:nrow(z2),]              
         }          
       if (nrow(z2) > nrow(z1)) {        
-        z2<-z2[1:length(z1)]             
+        z2<-z2[1:nrow(z1),]             
       }  
       w1 <- z1 %>% mutate(	# assemble new pair combining the 2 pairs                
-        HR2 = z2$HR_other,              
-        HR2_lead = z2$HR_self,                
-        HR2_change = z2$changeHR_other)
+        HR_other = z2$HR_other,              
+        HR_other_fut = z2$HR_other_fut,                
+        changeHR_other = z2$changeHR_other)
       }  ### DO SOMETHING TO SAVE THIS	# make sure that you do this!
       surrodf <- rbind(surrodf, w1)
      }}
 
 # Starting from the wide format, create "surrogate" dataset with the data from surrogate pairs
+surrodf$Type <- "Surrogate"
 
 # Make it into long format
+d_surro <- rbind(S4,surrodf)
 
 # Create models as in chunks above, but adding an interaction with the Real vs. Surrogate variable (exclude shuffled ones for simplicity)
+
+# Setting synchronous condition as the baseline
+d_surro$condition <- relevel(as.factor(d_surro$condition), "Synchronous")
+d_surro$Type <- relevel(as.factor(d_surro$Type), "Real")
+
+# Modelling
+HRm7 <- lmer(changeHR_self ~ 
+             0 + (condition + (HR_self + HR_other) : condition) : Type + 
+             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|participant) +
+             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|group), data = d_surro, REML = F)
+summary(HRm7)
+# We should take the output with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do. We can also simplify - doing both or either is fine.
+
+# Therefore, we simplify the model - removing stability and coupling as individual level parameters
+HRm8 <- lmer(changeHR_self ~ 
+             0 + condition : Type + 
+             0 + condition : Type + (1|participant) +
+             0 + condition : Type + (1|group), data = d_surro, REML = F)
+summary(HRm8)
+# However, the warning is still there...
+
+HRm9 <- lmer(changeHR_self ~ 
+             1 + (HR_self + HR_other) * condition * Type + 
+             1 + (HR_self + HR_other) * condition * Type + (1|participant) +
+             1 + (HR_self + HR_other) * condition * Type + (1|group), data = d_surro, REML = F) 
+summary(HRm6)
+
 ```
  
 
