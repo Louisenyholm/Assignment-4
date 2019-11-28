@@ -716,50 +716,40 @@ S4 <- dod %>%
 # Loading package
 p_load(lmerTest)
 
+# Loading data
+S4 <- read_csv("real_merged_df.csv")
+S4 <- S4 %>% 
+  filter(StudyNum == 4)
+
 # Set the most interesting contrast e.g. by defining synchronous or conversation as the baseline
 # Setting synchronous condition as the baseline
 S4$condition <- relevel(as.factor(S4$condition), "Synchronous")
 
 # Modelling
+# HRm1 <- lmer(changeHR_self ~ 
+#              1 + (HR_self + HR_other) * condition + 
+#              (1 + (HR_self + HR_other) * condition |participant) +
+#              (1 + (HR_self + HR_other) * condition |group),
+#              data = S4,
+#              REML = F)
+
+# For simplicity and for the model to be able to converge, we will use the simple model structure for the rest of the markdown.
 HRm1 <- lmer(changeHR_self ~ 
              0 + condition + (HR_self + HR_other) : condition + 
-             0 + condition + (HR_self + HR_other) : condition + (1|participant) +
-             0 + condition + (HR_self + HR_other) : condition + (1|group), data = S4, REML = F)
+             (0 + condition|participant) +
+             (0 + condition|group),
+             data = S4,
+             REML = F)
 summary(HRm1)
-# We should take the output with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do. We can also simplify - doing both or either is fine.
 
-# Therefore, we simplify the model - removing stability and coupling as individual level parameters
 HRm2 <- lmer(changeHR_self ~ 
-             0 + condition + 
-             0 + condition + (1|participant) +
-             0 + condition + (1|group), data = S4, REML = F)
+             1 + (HR_self + HR_other) * condition + 
+             (1 + condition|participant) +
+             (1 + condition|group),
+             data = S4,
+             REML = F)
 summary(HRm2)
-# However, the warning is still there...
-
-# # RESP
-# Respm1 <- lmer(changeResp_self ~ 
-#              (Resp_self + Resp_other) * condition + 
-#              (Resp_self + Resp_other) * condition + (1|participant) +
-#              (Resp_self + Resp_other) * condition + (1|group), data = S4)
-# summary(Respm1)
-# 
-# Respm2 <- lmer(changeResp_self ~ 
-#              0 + (Resp_self + Resp_other) : condition + 
-#              0 + (Resp_self + Resp_other) : condition + (1|participant) +
-#              0 + (Resp_self + Resp_other) : condition + (1|group), data = S4)
-# summary(Respm2)
-
-
-
-# 
-# HRm3 <- lmer(changeHR_self ~ 
-#              (HR_self + HR_other) * condition + 
-#              (HR_self + HR_other) * condition + (1|participant) +
-#              (HR_self + HR_other) * condition + (1|group), data = S4, REML = F) 
-# summary(HRm3)
-
-# Bonus points: Add to the previous model also change in the other to see whether my adaptation is influenced by the other's adaptation.
-
+# We should however take the outputs with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do.
 ```
 
 
@@ -803,27 +793,23 @@ d <- rbind(S4,shuffled_data)
 d$condition <- relevel(as.factor(d$condition), "Synchronous")
 
 # Modelling
-HRm4 <- lmer(changeHR_self ~ 
-             0 + (condition + (HR_self + HR_other) : condition) : Type + 
-             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|participant) +
-             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|group), data = d, REML = F)
-summary(HRm4)
-# We should take the output with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do. We can also simplify - doing both or either is fine.
+HRm1_shuf <- lmer(changeHR_self ~ 
+             0 + condition + ((HR_self + HR_other) : condition) : Type + 
+             (0 + condition|participant) +
+             (0 + condition|group),
+             data = d,
+             REML = F)
+summary(HRm1_shuf)
 
-# Therefore, we simplify the model - removing stability and coupling as individual level parameters
-HRm5 <- lmer(changeHR_self ~ 
-             0 + condition : Type + 
-             0 + condition : Type + (1|participant) +
-             0 + condition : Type + (1|group), data = d, REML = F)
-summary(HRm5)
-# However, the warning is still there...
+HRm2_shuf <- lmer(changeHR_self ~ 
+             1 + ((HR_self + HR_other) * condition) * Type + 
+             (1 + condition|participant) +
+             (1 + condition|group),
+             data = d,
+             REML = F)
+summary(HRm2_shuf)
 
-HRm6 <- lmer(changeHR_self ~ 
-             1 + (HR_self + HR_other) * condition * Type + 
-             1 + (HR_self + HR_other) * condition * Type + (1|participant) +
-             1 + (HR_self + HR_other) * condition * Type + (1|group), data = d, REML = F) 
-summary(HRm6)
-
+# We should however take the outputs with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do.
 ```
  
  
@@ -882,26 +868,25 @@ d_surro$condition <- relevel(as.factor(d_surro$condition), "Synchronous")
 d_surro$Type <- relevel(as.factor(d_surro$Type), "Real")
 
 # Modelling
-HRm7 <- lmer(changeHR_self ~ 
-             0 + (condition + (HR_self + HR_other) : condition) : Type + 
-             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|participant) +
-             0 + (condition + (HR_self + HR_other) : condition) : Type + (1|group), data = d_surro, REML = F)
-summary(HRm7)
-# We should take the output with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do. We can also simplify - doing both or either is fine.
+HRm1_surro <- lmer(changeHR_self ~ 
+             0 + condition + ((HR_self + HR_other) : condition) : Type + 
+             (0 + condition|participant) +
+             (0 + condition|group),
+             data = d_surro,
+             REML = F,
+             control = lmerControl(optCtrl=list(xtol_abs=1e-8, ftol_abs=1e-8)))
+summary(HRm1_surro)
 
-# Therefore, we simplify the model - removing stability and coupling as individual level parameters
-HRm8 <- lmer(changeHR_self ~ 
-             0 + condition : Type + 
-             0 + condition : Type + (1|participant) +
-             0 + condition : Type + (1|group), data = d_surro, REML = F)
-summary(HRm8)
-# However, the warning is still there...
+HRm2_surro <- lmer(changeHR_self ~ 
+             1 + ((HR_self + HR_other) * condition) * Type + 
+             (1 + condition|participant) +
+             (1 + condition|group),
+             data = d_surro,
+             REML = F,
+             control = lmerControl(optCtrl=list(xtol_abs=1e-8, ftol_abs=1e-8)))
+summary(HRm2_surro)
 
-HRm9 <- lmer(changeHR_self ~ 
-             1 + (HR_self + HR_other) * condition * Type + 
-             1 + (HR_self + HR_other) * condition * Type + (1|participant) +
-             1 + (HR_self + HR_other) * condition * Type + (1|group), data = d_surro, REML = F) 
-summary(HRm6)
+# We should however take the outputs with caution! Because of the warning! It's trapped in a 1000-dimensional space. But it is fine to do.
 
 ```
  
